@@ -170,117 +170,244 @@ def extract_data_from_csv():
                 outfile.write(field_1 + "," + field_2 + "," + field_3 + "," + field_4 + "\n")
 
 def extract_data_from_tsv():
+    """
+    Extract relevant fields from the tollplaza-data.tsv file.
+    
+    This function reads the TSV (Tab-Separated Values) file and extracts
+    specific fields (columns 5-7, 0-indexed: fields[4], fields[5], fields[6])
+    from each record.
+    
+    Input:  tollplaza-data.tsv (full record with multiple fields)
+    Output: tsv_data.csv (fields 5-7: likely toll_amount, tag_number, etc.)
+    
+    Data Format: TSV (Tab-Separated Values)
+    Extraction: Fields at index 4, 5, 6 (skipping first 4 fields)
+    """
     global tollplaza_data_raw, tollplaza_data_ext
     print("Extracting data from TSV file...")
+    
+    # Read from raw TSV and write extracted fields to staging
     with open(tollplaza_data_raw, 'r') as infile, \
             open(tollplaza_data_ext, 'w') as outfile:
         for line in infile:
-            fields = line.strip().split("\t")
+            fields = line.strip().split("\t")  # Split by tab character
             if len(fields) >= 4:
+                # Extract fields at indices 4, 5, 6 (skipping first 4 columns)
                 field_1 = fields[4]
                 field_2 = fields[5]
                 field_3 = fields[6]
                 outfile.write(field_1 + "," + field_2 + "," + field_3 + "\n")
 
 def extract_data_from_fixed_width():
+    """
+    Extract relevant fields from the payment-data.txt file.
+    
+    This function reads the fixed-width format file (space-delimited) and
+    extracts specific fields (columns 6-7, 0-indexed: fields[5], fields[6])
+    from each record.
+    
+    Note: Fixed-width files use positional data rather than delimiters.
+    The data appears to be space-separated in this dataset.
+    
+    Input:  payment-data.txt (full record)
+    Output: fixed_width_data.csv (fields at index 5, 6)
+    
+    Data Format: Fixed-width (space-separated in this case)
+    Extraction: Fields at index 5, 6
+    """
     global payment_data_raw, payment_data_ext
     print("Extracting data from Fixed Width file...")
+    
+    # Read from raw fixed-width file and write extracted fields to staging
     with open(payment_data_raw, 'r') as infile, \
             open(payment_data_ext, 'w') as outfile:
         for line in infile:
-            fields = line.strip().split(" ")
+            fields = line.strip().split(" ")  # Split by space delimiter
             if len(fields) >= 4:
+                # Extract fields at indices 5 and 6
                 field_1 = fields[5]
                 field_2 = fields[6]
                 outfile.write(field_1 + "," + field_2 + "\n")
 
 def consolidate_data():
+    """
+    Consolidate data from all three extracted files into a single file.
+    
+    This function merges the extracted data from:
+    - csv_data.csv (vehicle data - 4 fields)
+    - tsv_data.csv (toll plaza data - 3 fields)
+    - fixed_width_data.csv (payment data - 2 fields)
+    
+    Into a single consolidated CSV file with 9 total fields.
+    
+    Implementation Notes:
+    - Uses zip() to iterate through all three files simultaneously
+    - Assumes files have equal number of records (aligned data)
+    - Strips newline characters before joining to avoid duplicates
+    
+    Output Format: CSV with 9 columns (4 + 3 + 2)
+    """
     print("Consolidating data...")
+    
+    # Open all three extracted files and the consolidated output
     with open(vehicle_data_ext, "r") as infile1, \
          open(tollplaza_data_ext, "r") as infile2, \
          open(payment_data_ext, "r") as infile3, \
          open(extracted_data_ext, "w") as outfile:
+        
+        # Iterate through all three files simultaneously
         for line1, line2, line3 in zip(infile1, infile2, infile3):
+            # Strip existing newlines and concatenate with comma separator
             consolidated_line = f"{line1.strip()},{line2.strip()},{line3.strip()}\n"
             outfile.write(consolidated_line)
 
 def transform_data():
+    """
+    Apply data transformations to the consolidated data.
+    
+    This function performs the following transformations:
+    1. Converts field at index 3 to uppercase (likely vehicle type)
+    2. Limits output to first 7 fields
+    
+    This transformation standardizes categorical data (vehicle types)
+    to ensure consistency in the final output.
+    
+    Input:  extracted_data.csv (9 fields)
+    Output: transformed_data.csv (7 fields, field 3 uppercase)
+    
+    Transformation Rules:
+    - Field 3: Convert to uppercase (e.g., "car" -> "CAR")
+    - Fields: Keep only first 7 fields
+    """
     global extracted_data_ext, transformed_data
     print("Transforming data...")
+    
+    # Read consolidated data and write transformed data
     with open(extracted_data_ext, 'r') as infile, \
             open(transformed_data, 'w') as outfile:
         for line in infile:
             fields = line.strip().split(",")
             if len(fields) >= 7:
+                # Transform: Convert field 3 to uppercase
                 fields[3] = fields[3].upper()
+                # Write only first 7 fields to output
                 outfile.write(",".join(fields[:7]) + "\n")
 
-# Define the default_args dictionary to specify the default parameters for the DAG and its tasks
+# =============================================================================
+# DAG Configuration
+# =============================================================================
+
+# Default arguments applied to all tasks in the DAG
+# These settings control retry behavior, notifications, and ownership
 default_args = {
-    'owner': 'Amin Safout Ali',
-    'start_date': datetime(2026, 4, 20),
-    'email': 'aminsafoutali@gmail.com',
-    'email_on_failure': True,
-    'email_on_retry': True,
-    'retries': 1,
-    'retry_delay': timedelta(minutes=5),
+    'owner': 'Amin Safout Ali',           # DAG owner for accountability
+    'start_date': datetime(2026, 4, 20),  # DAG start date (April 20, 2026)
+    'email': 'aminsafoutali@gmail.com',   # Email for notifications
+    'email_on_failure': True,             # Send email when task fails
+    'email_on_retry': True,               # Send email when task retries
+    'retries': 1,                         # Number of retry attempts
+    'retry_delay': timedelta(minutes=5),  # Wait time between retries (5 min)
 }
 
-# Define the DAG with the specified parameters
+# Create the DAG instance with configuration parameters
+# 
+# DAG Parameters:
+# - dag_id: Unique identifier for the DAG ("ETL_toll_data")
+# - default_args: Dictionary of default task parameters (defined above)
+# - description: Human-readable description of the DAG's purpose
+# - schedule: Run frequency (timedelta(days=1) = once per day)
 dag = DAG(
     'ETL_toll_data',
     default_args=default_args,
-    description='Apache Airflow Final Assignment',
-    schedule=timedelta(days=1),
+    description='Apache Airflow Final Assignment - ETL Toll Data Pipeline',
+    schedule=timedelta(days=1),  # Daily execution at midnight
 )
 
-# download task
+# =============================================================================
+# Task Definitions
+# =============================================================================
+# Each task is a PythonOperator that executes a specific ETL function.
+# Tasks are executed in the order defined by the task dependencies below.
+
+# Task 1: Download the raw data archive from remote URL
 download_data = PythonOperator(
     task_id='download_data',
     python_callable=download_dataset,
     dag=dag,
 )
 
-# untar task
+# Task 2: Extract the downloaded archive to raw directory
 untar_data = PythonOperator(
     task_id='untar_data',
     python_callable=untar_dataset,
     dag=dag,
 )
 
-# extract task for CSV file
+# Task 3: Extract fields from CSV format (vehicle data)
 extract_csv_task = PythonOperator(
     task_id='extract_data_csv',
     python_callable=extract_data_from_csv,
     dag=dag,
 )
 
-# extract task for TSV file
+# Task 4: Extract fields from TSV format (toll plaza data)
 extract_tsv_task = PythonOperator(
     task_id='extract_data_tsv',
     python_callable=extract_data_from_tsv,
     dag=dag,
 )
 
-# extract task for Fixed Width file
+# Task 5: Extract fields from fixed-width format (payment data)
 extract_fixed_width_task = PythonOperator(
     task_id='extract_data_fixed_width',
     python_callable=extract_data_from_fixed_width,
     dag=dag,
 )
 
-# consolidate task
+# Task 6: Consolidate all extracted data into single file
 consolidate_task = PythonOperator(
     task_id='consolidate_data',
     python_callable=consolidate_data,
     dag=dag,
 )
 
-# transform task
+# Task 7: Transform data (uppercase, field selection)
 transform_task = PythonOperator(
     task_id='transform_data',
     python_callable=transform_data,
     dag=dag,
 )
+
+
+# =============================================================================
+# Task Dependencies / Flow Control
+# =============================================================================
+# Define the execution order of tasks using bitwise shift operators:
+#
+# Flow Diagram:
+#   download_data
+#        |
+#        v
+#    untar_data
+#        |
+#        v
+#    +----+----+----+
+#    |    |    |    |
+#    v    v    v    v
+#  extract_csv  extract_tsv  extract_fixed_width
+#    |    |    |    |
+#    +----+----+----+
+#        |
+#        v
+#   consolidate_data
+#        |
+#        v
+#    transform_data
+#
+# Execution Order:
+# 1. download_data must complete before untar_data starts
+# 2. untar_data must complete before all three extract tasks start (parallel)
+# 3. All three extract tasks must complete before consolidate_data starts
+# 4. consolidate_data must complete before transform_data starts
 
 download_data >> untar_data >> [extract_csv_task, extract_tsv_task, extract_fixed_width_task] >> consolidate_task >> transform_task

@@ -1,21 +1,27 @@
-Overview
-========
+# ETL Toll Data Pipeline - Apache Airflow
 
-Welcome to Astronomer! This project was generated after you ran 'astro dev init' using the Astronomer CLI. This readme describes the contents of the project, as well as how to run Apache Airflow on your local machine.
+## Overview
+
+This project implements a complete ETL (Extract, Transform, Load) pipeline using Apache Airflow's PythonOperator. The pipeline processes toll plaza data from multiple file formats (CSV, TSV, and fixed-width) and produces a consolidated, transformed output.
+
+> **Course**: ETL and Data Pipelines with Shell, Airflow, and Kafka  
+> **Institution**: IBM/Coursera Data Engineering Professional Certificate  
+> **Author**: Amin Safout Ali  
+> **Date**: April 20, 2026
 
 Project Contents
 ================
 
 Your Astro project contains the following files and folders:
 
-- dags: This folder contains the Python files for your Airflow DAGs. By default, this directory includes one example DAG:
-    - `example_astronauts`: This DAG shows a simple ETL pipeline example that queries the list of astronauts currently in space from the Open Notify API and prints a statement for each astronaut. The DAG uses the TaskFlow API to define tasks in Python, and dynamic task mapping to dynamically print a statement for each astronaut. For more on how this DAG works, see our [Getting started tutorial](https://www.astronomer.io/docs/learn/get-started-with-airflow).
+- dags: Contains the ETL pipeline DAGs:
+    - `python_etl.py`: Main ETL toll data pipeline using PythonOperator
 - Dockerfile: This file contains a versioned Astro Runtime Docker image that provides a differentiated Airflow experience. If you want to execute other commands or overrides at runtime, specify them here.
-- include: This folder contains any additional files that you want to include as part of your project. It is empty by default.
-- packages.txt: Install OS-level packages needed for your project by adding them to this file. It is empty by default.
-- requirements.txt: Install Python packages needed for your project by adding them to this file. It is empty by default.
-- plugins: Add custom or community plugins for your project to this file. It is empty by default.
-- airflow_settings.yaml: Use this local-only file to specify Airflow Connections, Variables, and Pools instead of entering them in the Airflow UI as you develop DAGs in this project.
+- include: Additional files (empty by default)
+- packages.txt: OS-level packages
+- requirements.txt: Python packages
+- plugins: Custom plugins (empty by default)
+- airflow_settings.yaml: Local Airflow configuration
 
 Deploy Your Project Locally
 ===========================
@@ -38,6 +44,44 @@ Deploy Your Project to Astronomer
 =================================
 
 If you have an Astronomer account, pushing code to a Deployment on Astronomer is simple. For deploying instructions, refer to Astronomer documentation: https://www.astronomer.io/docs/astro/deploy-code/
+
+---
+
+## ETL Pipeline Details
+
+### Overview
+
+This DAG implements a complete ETL pipeline for processing toll plaza data:
+
+1. **Download**: Fetches `tolldata.tgz` from IBM Cloud Object Storage
+2. **Extract**: Unpacks the archive to `/usr/local/airflow/dags/finalassignment/raw/`
+3. **Transform**: Extracts specific fields from 3 different file formats:
+   - `vehicle-data.csv` → extracts fields 0-3
+   - `tollplaza-data.tsv` → extracts fields 4-6
+   - `payment-data.txt` → extracts fields 5-6
+4. **Consolidate**: Merges all extracted data into single file (9 fields)
+5. **Transform**: Converts field 3 to uppercase, outputs 7 fields
+
+### DAG Configuration
+
+- **Owner**: Amin Safout Ali
+- **Schedule**: Daily at midnight
+- **Retries**: 1 attempt with 5-minute delay
+- **Notifications**: Email on failure and retry
+
+### Data Flow
+
+```
+download_data → untar_data → [extract_csv, extract_tsv, extract_fixed] → consolidate → transform
+```
+
+---
+
+## License
+
+This project is part of the IBM Data Engineering Professional Certificate course on Coursera.
+
+---
 
 Contact
 =======
