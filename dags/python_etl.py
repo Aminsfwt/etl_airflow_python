@@ -1,66 +1,168 @@
+# =============================================================================
+# ETL Toll Data Pipeline - Apache Airflow DAG
+# =============================================================================
+# This DAG implements a complete ETL (Extract, Transform, Load) pipeline
+# that processes toll plaza data from multiple file formats.
+#
+# Data Flow:
+#   1. Download: Fetch raw toll data archive from remote server
+#   2. Extract: Unpack the tar.gz archive
+#   3. Transform: Extract specific fields from CSV, TSV, and fixed-width formats
+#   4. Consolidate: Merge all extracted data into a single file
+#   5. Transform: Apply data transformations (uppercase conversion)
+#
+# Author: Amin Safout Ali
+# Created: April 20, 2026
+# =============================================================================
+
+# Airflow core imports for DAG definition
 from airflow import DAG
 from datetime import datetime, timedelta
+
+# Python operator for executing Python callable functions
 from airflow.providers.standard.operators.python import PythonOperator
+
+# Path handling for cross-platform file operations
 from pathlib import Path
 
+# =============================================================================
+# Directory and File Path Configuration
+# =============================================================================
+# All paths are relative to the Airflow DAGs directory in the container.
+# These paths match the structure expected by the final assignment.
+
+# Raw data directory - contains downloaded source files
 RAW_BASE_DIR = Path("/usr/local/airflow/dags/finalassignment/raw")
+
+# Raw input files from various formats:
+# - vehicle-data.csv: Contains vehicle information in CSV format
+# - tollplaza-data.tsv: Contains toll plaza data in TSV format
+# - payment-data.txt: Contains payment data in fixed-width format
 vehicle_data_raw = RAW_BASE_DIR / "vehicle-data.csv"
 tollplaza_data_raw = RAW_BASE_DIR / "tollplaza-data.tsv"
 payment_data_raw = RAW_BASE_DIR / "payment-data.txt"
 
+# Staging directory - intermediate files after extraction
 STAGING_BASE_DIR = Path("/usr/local/airflow/dags/finalassignment/staging")
+
+# Staging output files:
+# - csv_data.csv: Extracted fields from vehicle-data.csv
+# - tsv_data.csv: Extracted fields from tollplaza-data.tsv
+# - fixed_width_data.csv: Extracted fields from payment-data.txt
+# - extracted_data.csv: Consolidated data from all three sources
 vehicle_data_ext = STAGING_BASE_DIR / "csv_data.csv"
 tollplaza_data_ext = STAGING_BASE_DIR / "tsv_data.csv"
 payment_data_ext = STAGING_BASE_DIR / "fixed_width_data.csv"
 extracted_data_ext = STAGING_BASE_DIR / "extracted_data.csv"
 
+# Transformed directory - final output after data transformation
 TRANS_BASE_DIR = Path("/usr/local/airflow/dags/finalassignment/transformed")
+
+# Final transformed output file
 transformed_data = TRANS_BASE_DIR / "transformed_data.csv"
 
-# define function to download dataset
+
+# =============================================================================
+# ETL Task Functions
+# =============================================================================
+
 def download_dataset():
+    """
+    Download the toll data archive from a remote URL.
+    
+    This function fetches a compressed tar.gz archive containing
+    raw toll data from IBM SkillsNetwork cloud storage.
+    
+    Source URL: IBM Cloud Object Storage (S3 compatible)
+    Target File: /usr/local/airflow/dags/finalassignment/tolldata.tgz
+    
+    Implementation Notes:
+    - Uses streaming download to handle large files efficiently
+    - Reads in 8KB chunks to manage memory usage
+    - Includes 30-second timeout to prevent hanging connections
+    """
     import os
     from urllib.request import urlopen
     
     print("Downloading dataset...")
+    
+    # Remote source URL for the toll data archive
     source = "https://cf-courses-data.s3.us.cloud-object-storage.appdomain.cloud/IBM-DB0250EN-SkillsNetwork/labs/Final%20Assignment/tolldata.tgz"
+    
+    # Local target path where the archive will be saved
     target_path = "/usr/local/airflow/dags/finalassignment/tolldata.tgz"
-    #os.makedirs(os.path.dirname(target_path), exist_ok=True)
 
+    # Stream download with chunked reading for memory efficiency
     with urlopen(source, timeout=30) as response:
         with open(target_path, "wb") as f:
             while True:
-                chunk = response.read(8192)
+                chunk = response.read(8192)  # 8KB chunks
                 if not chunk:
                     break
-                if chunk:
-                    f.write(chunk)
+                f.write(chunk)
 
     print(f"Download complete: {target_path}")
 
-# define function to extract dataset
 def untar_dataset():
+    """
+    Extract the downloaded tar.gz archive to the raw data directory.
+    
+    This function decompresses the toll data archive and extracts
+    all contained files to the designated raw data directory.
+    
+    Expected extracted files:
+    - vehicle-data.csv: Vehicle registration data
+    - tollplaza-data.tsv: Toll plaza transaction records
+    - payment-data.txt: Payment information in fixed-width format
+    
+    Implementation Notes:
+    - Creates the extraction directory if it doesn't exist
+    - Uses gzip compression format ("r:gz")
+    - Extracts all files recursively
+    """
     import os
     import tarfile
 
     print("Extracting dataset...")
+    
+    # Path to the downloaded archive
     archive_path = "/usr/local/airflow/dags/finalassignment/tolldata.tgz"
+    
+    # Destination directory for extracted files
     extract_path = "/usr/local/airflow/dags/finalassignment/raw"
+    
+    # Ensure extraction directory exists
     os.makedirs(extract_path, exist_ok=True)
 
+    # Extract all files from the gzip-compressed tar archive
     with tarfile.open(archive_path, "r:gz") as tar:
         tar.extractall(path=extract_path)
 
     print(f"Extraction complete: {extract_path}")
 
 def extract_data_from_csv():
+    """
+    Extract relevant fields from the vehicle-data.csv file.
+    
+    This function reads the raw CSV file and extracts the first four
+    fields (columns) from each record.
+    
+    Input:  vehicle-data.csv (full record)
+    Output: csv_data.csv (first 4 fields: likely rowid, timestamp, vehicle_id, vehicle_type)
+    
+    Data Format: CSV (Comma-Separated Values)
+    Extraction: First 4 comma-delimited fields
+    """
     global vehicle_data_raw, vehicle_data_ext
     print("Extracting data from CSV file...")
+    
+    # Read from raw CSV and write extracted fields to staging
     with open(vehicle_data_raw, 'r') as infile, \
             open(vehicle_data_ext, 'w') as outfile:
         for line in infile:
             fields = line.strip().split(",")
             if len(fields) >= 4:
+                # Extract first 4 fields from each CSV record
                 field_1 = fields[0]
                 field_2 = fields[1]
                 field_3 = fields[2]
